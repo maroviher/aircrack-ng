@@ -180,6 +180,7 @@ struct AP_info
 	int marked;
 	int marked_color;
 	struct WPS_info wps;
+	int m_bUnderAttack, deauth_if_OPENorWEP;
 };
 
 /** linked list of detected clients */

