@@ -98,6 +98,19 @@ uint8_t tmpbuf[4096] __attribute__((aligned(16)));
 static const unsigned char llcnull[] = {0, 0, 0, 0};
 #define MAC_STR_LEN 18 //12:34:56:78:90:00
 
+void LogMsg(const char* pMsg) {
+	time_t rawtime;
+	time(&rawtime);
+	struct tm* timeinfo = localtime(&rawtime);
+
+	char strTime[80];
+	strftime(strTime, 80, "%x %T", timeinfo);
+
+	char buf[16384];
+	snprintf(buf, sizeof(buf), "echo \"%s    -    %s\" >> airodump.log", strTime, pMsg);
+	system(buf);
+}
+
 int g_iLastSetChannel = -1;
 static bool Check500msGone(void)
 {
@@ -515,6 +528,32 @@ static struct local_options
 
 	int relative_time; /* read PCAP in psuedo-real-time */
 } lopt;
+
+unsigned i_ChanRunner = 0;
+struct timeval time_last_channel_switch = {0};
+void ChannelHopper(void) {
+	struct timeval cur_time;
+	gettimeofday(&cur_time, NULL);
+
+	unsigned int time_since_last_switch =
+			1000000 * (cur_time.tv_sec - time_last_channel_switch.tv_sec)
+					+ (cur_time.tv_usec - time_last_channel_switch.tv_usec);
+
+	if (time_since_last_switch >= (unsigned int)lopt.hopfreq*1000) {
+		if (0 == wi_set_channel(wi[0], abg_chans[i_ChanRunner])) {
+			time_last_channel_switch = cur_time;
+			lopt.channel[0] = abg_chans[i_ChanRunner];
+			if (i_ChanRunner < (sizeof(abg_chans) / sizeof(abg_chans[0]) - 2))
+				i_ChanRunner++;
+			else
+				i_ChanRunner = 0;
+		}
+		else {
+			perror("wi_set_channel failed");
+			exit(-1);
+		}
+	}
+}
 
 static void resetSelection(void)
 {
@@ -3675,7 +3714,10 @@ static void dump_print(int ws_row, int ws_col, int if_num)
 	int num_ap;
 	int num_sta;
 
-	if (!lopt.singlechan) columns_ap -= 4; // no RXQ in scan mode
+	if (!lopt.singlechan) {
+		ChannelHopper();
+		columns_ap -= 4; // no RXQ in scan mode
+	}
 	if (lopt.show_uptime) columns_ap += 15; // show uptime needs more space
 
 	nlines = 2;
@@ -3833,6 +3875,7 @@ static void dump_print(int ws_row, int ws_col, int if_num)
 	move(CURSOR_DOWN, 1);
 	CHECK_END_OF_SCREEN();
 	bool b500ms_gone = false;
+	bool bAP2AttackFound = false;
 	if (lopt.show_ap)
 	{
 		strbuf[0] = 0;
@@ -4141,6 +4184,21 @@ static void dump_print(int ws_row, int ws_col, int if_num)
 			}
 
 			if (CHECK_REALLY_DEAUTH(ap_cur)) {
+				bAP2AttackFound = true;
+				if(lopt.channel[0] != ap_cur->channel) {
+					if (wi_set_channel(wi[0], ap_cur->channel) == 0) {
+						char buf[1024];
+						sprintf(buf, "'%s' - found on channel %d, disabling hopping",
+								ap_cur->essid, ap_cur->channel);
+						LogMsg(buf);
+						lopt.channel[0] = ap_cur->channel;
+						lopt.singlechan = 1;
+					}
+					else {
+						perror("wi_set_channel failed");
+						exit(-1);
+					}
+				}
 				if ((b500ms_gone = Check500msGone())) {
 					ap_cur->marked_color++;
 					if (ap_cur->marked_color > (TEXT_MAX_COLOR - 1))
@@ -4301,6 +4359,11 @@ static void dump_print(int ws_row, int ws_col, int if_num)
 		erase_line(0);
 		move(CURSOR_DOWN, 1);
 		CHECK_END_OF_SCREEN();
+	}
+
+	if((lopt.singlechan == 1) && (bAP2AttackFound == 0)) {
+		LogMsg("No AP under attack found, continuing hopping");
+		lopt.singlechan = 0;
 	}
 
 	if (lopt.show_sta)
@@ -6972,6 +7035,7 @@ int main(int argc, char * argv[])
 
 			if (lopt.channel[0] == 0)
 			{
+#if 0
 				IGNORE_NZ(pipe(lopt.ch_pipe));
 				IGNORE_NZ(pipe(lopt.cd_pipe));
 
@@ -7013,6 +7077,7 @@ int main(int argc, char * argv[])
 					channel_hopper(wi, lopt.num_cards, chan_count, main_pid);
 					exit(EXIT_FAILURE);
 				}
+#endif
 			}
 			else
 			{
