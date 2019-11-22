@@ -218,6 +218,9 @@ struct ST_info
 	float gps_loc_min[5]; /* min gps coordinates      */
 	float gps_loc_max[5]; /* max gps coordinates      */
 	float gps_loc_best[5]; /* best gps coordinates     */
+	unsigned int m_uiEAPOLpkts, m_uiCntAssocRequest, m_uiCntAssocResp,
+		m_uiCntReAssocRequest, m_uiCntReAssocResp, m_uiCntProbeRequest,
+		m_uiCntProbeResp, m_uiCntDisass, m_uiCntAuth, m_uiCntDeauth;
 };
 
 #endif //AIRCRACK_NG_STATION_H

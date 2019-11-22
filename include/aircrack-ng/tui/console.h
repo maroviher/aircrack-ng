@@ -78,6 +78,7 @@
 #define KEY_a 0x61
 #define KEY_c 0x63
 #define KEY_d 0x64
+#define KEY_g 0x67	//show/hide attack statistics
 #define KEY_i 0x69
 #define KEY_m 0x6D
 #define KEY_n 0x6E

@@ -527,6 +527,7 @@ static struct local_options
 	unsigned long min_pkts;
 
 	int relative_time; /* read PCAP in psuedo-real-time */
+	unsigned char show_deauth_stat;
 } lopt;
 
 void ChannelHopper(void) {
@@ -786,6 +787,16 @@ static void input_thread(void * arg)
 			else
 				snprintf(
 					lopt.message, sizeof(lopt.message), "][ resumed output");
+		}
+
+		if (keycode == KEY_g)
+		{
+			lopt.show_deauth_stat = (lopt.show_deauth_stat + 1) % 2;
+			static const char strDeauthStat[]="AssocReq/AssocResp/ReAssocReq/ReAssocResp/ProbeRequest/ProbeResp/Disass/Auth/Deauth";
+			if(lopt.show_deauth_stat)
+				snprintf(lopt.message, sizeof(lopt.message), strDeauthStat);
+			else
+				memset(lopt.message, ' ', sizeof(lopt.message));
 		}
 
 		if (keycode == KEY_r)
@@ -1489,6 +1500,50 @@ static int remove_namac(unsigned char * mac)
 	}
 
 	return (0);
+}
+void IncDeauthStatistic(uint8_t b, struct ST_info * st_cur) {
+	if(st_cur)
+	{
+		switch(b)
+		{
+		case 0x00:
+			//assoc req
+			st_cur->m_uiCntAssocRequest++;
+			break;
+		case 0x10:
+			//assoc resp
+			st_cur->m_uiCntAssocResp++;
+			break;
+		case 0x20:
+			//reassoc req
+			st_cur->m_uiCntReAssocRequest++;
+			break;
+		case 0x30:
+			//reassoc resp
+			st_cur->m_uiCntReAssocResp++;
+			break;
+		case 0x40:
+			//probe request
+			st_cur->m_uiCntProbeRequest++;
+			break;
+		case 0x50:
+			//probe resp
+			st_cur->m_uiCntProbeResp++;
+			break;
+		case 0xA0:
+			//disassoc
+			st_cur->m_uiCntDisass++;
+			break;
+		case 0xB0:
+			//authentication
+			st_cur->m_uiCntAuth++;
+			break;
+		case 0xC0:
+			//deauthentication
+			st_cur->m_uiCntDeauth++;
+			break;
+		}
+	}
 }
 
 // NOTE(jbenden): This is also in ivstools.c
@@ -2586,6 +2641,7 @@ skip_probe:
 		}
 	}
 
+	IncDeauthStatistic(h80211[0], st_cur);
 	/* packet parsing: Authentication Response */
 
 	if (h80211[0] == IEEE80211_FC0_SUBTYPE_AUTH && caplen >= 30)
@@ -4493,7 +4549,16 @@ static void dump_print(int ws_row, int ws_col, int if_num)
 						   ? "PMKID"
 						   : (st_cur->wpa.state == 7 ? "EAPOL" : ""));
 				if(lopt.show_manufacturer)
-						printf(" '%s'", st_cur->manuf);
+					printf(" '%s'", st_cur->manuf);
+				int ideauthLen = 0;
+				if(lopt.show_deauth_stat) {
+					char strbuf[100];
+					ideauthLen += sprintf( strbuf, "  %d/%d/%d/%d/%d/%d/%d/%d/%d",
+						st_cur->m_uiCntAssocRequest, st_cur->m_uiCntAssocResp, st_cur->m_uiCntReAssocRequest,
+						st_cur->m_uiCntReAssocResp, st_cur->m_uiCntProbeRequest, st_cur->m_uiCntProbeResp,
+						st_cur->m_uiCntDisass, st_cur->m_uiCntAuth, st_cur->m_uiCntDeauth);
+					printf(" %s", strbuf);
+				}
 				if (ws_col > (columns_sta - 6))
 				{
 					memset(ssid_list, 0, sizeof(ssid_list));
@@ -4518,7 +4583,7 @@ static void dump_print(int ws_row, int ws_col, int if_num)
 							< 0
 						? abort()
 						: (void) 0;
-					strbuf[MAX(ws_col - 76 - strlen(st_cur->manuf) - 3, 0)] = '\0';
+					strbuf[MAX(ws_col - 76 - (st_cur->manuf != NULL)?(strlen(st_cur->manuf) - 3):(0) - ideauthLen, 0)] = '\0';
 					printf(" %s", strbuf);
 				}
 
@@ -7636,7 +7701,8 @@ int main(int argc, char * argv[])
 
 						break;
 					}
-
+					if (ri.ri_power == 0) //this is our own injected packet, skip it
+						continue;
 					read_pkts++;
 
 					wi_read_failed = 0;
