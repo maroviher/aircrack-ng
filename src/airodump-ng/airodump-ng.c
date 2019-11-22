@@ -4493,7 +4493,8 @@ static void dump_print(int ws_row, int ws_col, int if_num)
 					   (st_cur->wpa.pmkid[0] != 0)
 						   ? "PMKID"
 						   : (st_cur->wpa.state == 7 ? "EAPOL" : ""));
-
+				if(lopt.show_manufacturer)
+						printf(" '%s'", st_cur->manuf);
 				if (ws_col > (columns_sta - 6))
 				{
 					memset(ssid_list, 0, sizeof(ssid_list));
@@ -4518,7 +4519,7 @@ static void dump_print(int ws_row, int ws_col, int if_num)
 							< 0
 						? abort()
 						: (void) 0;
-					strbuf[MAX(ws_col - 76, 0)] = '\0';
+					strbuf[MAX(ws_col - 76 - strlen(st_cur->manuf) - 3, 0)] = '\0';
 					printf(" %s", strbuf);
 				}
 
