@@ -4027,7 +4027,7 @@ static void dump_print(int ws_row, int ws_col, int if_num)
 			{
 				snprintf(strbuf + len,
 						 sizeof(strbuf) - len,
-						 "  %3d %3d %8lu %8lu %4d",
+						 "  %4d %3d %8lu %8lu %4d",
 						 ap_cur->avg_power,
 						 ap_cur->rx_quality,
 						 ap_cur->nb_bcn,
@@ -4038,7 +4038,7 @@ static void dump_print(int ws_row, int ws_col, int if_num)
 			{
 				snprintf(strbuf + len,
 						 sizeof(strbuf) - len,
-						 "  %3d %8lu %8lu %4d",
+						 "  %4d %8lu %8lu %4d",
 						 ap_cur->avg_power,
 						 ap_cur->nb_bcn,
 						 ap_cur->nb_data,
@@ -4482,7 +4482,7 @@ static void dump_print(int ws_row, int ws_col, int if_num)
 					   st_cur->stmac[4],
 					   st_cur->stmac[5]);
 
-				printf("  %3d ", st_cur->power);
+				printf("  %4d ", st_cur->power);
 				printf("  %2d", st_cur->rate_to / 1000000);
 				printf("%c", (st_cur->qos_fr_ds) ? 'e' : ' ');
 				printf("-%2d", st_cur->rate_from / 1000000);
@@ -4518,7 +4518,7 @@ static void dump_print(int ws_row, int ws_col, int if_num)
 							< 0
 						? abort()
 						: (void) 0;
-					strbuf[MAX(ws_col - 75, 0)] = '\0';
+					strbuf[MAX(ws_col - 76, 0)] = '\0';
 					printf(" %s", strbuf);
 				}
 
