@@ -529,9 +529,9 @@ static struct local_options
 	int relative_time; /* read PCAP in psuedo-real-time */
 } lopt;
 
-unsigned i_ChanRunner = 0;
-struct timeval time_last_channel_switch = {0};
 void ChannelHopper(void) {
+	static struct timeval time_last_channel_switch = {0};
+	static unsigned i_ChanRunner = 0;
 	struct timeval cur_time;
 	gettimeofday(&cur_time, NULL);
 
@@ -540,16 +540,15 @@ void ChannelHopper(void) {
 					+ (cur_time.tv_usec - time_last_channel_switch.tv_usec);
 
 	if (time_since_last_switch >= (unsigned int)lopt.hopfreq*1000) {
-		if (0 == wi_set_channel(wi[0], abg_chans[i_ChanRunner])) {
+		if(lopt.channels[i_ChanRunner] == 0)
+			i_ChanRunner = 0;
+		if (0 == wi_set_channel(wi[0], lopt.channels[i_ChanRunner])) {
 			time_last_channel_switch = cur_time;
-			lopt.channel[0] = abg_chans[i_ChanRunner];
-			if (i_ChanRunner < (sizeof(abg_chans) / sizeof(abg_chans[0]) - 2))
-				i_ChanRunner++;
-			else
-				i_ChanRunner = 0;
+			lopt.channel[0] = lopt.channels[i_ChanRunner];
+			i_ChanRunner++;
 		}
 		else {
-			perror("wi_set_channel failed");
+			fprintf(stderr, "wi_set_channel %d failed", lopt.channels[i_ChanRunner]);
 			exit(-1);
 		}
 	}
