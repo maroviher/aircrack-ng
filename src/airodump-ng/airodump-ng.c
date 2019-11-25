@@ -528,6 +528,7 @@ static struct local_options
 
 	int relative_time; /* read PCAP in psuedo-real-time */
 	unsigned char show_deauth_stat;
+	bool bAttackEnabled;
 } lopt;
 
 void ChannelHopper(void) {
@@ -3769,7 +3770,7 @@ static void dump_print(int ws_row, int ws_col, int if_num)
 	int num_ap;
 	int num_sta;
 
-	if (!lopt.singlechan) {
+	if (!lopt.singlechan && lopt.bAttackEnabled) {
 		ChannelHopper();
 		columns_ap -= 4; // no RXQ in scan mode
 	}
@@ -4238,7 +4239,7 @@ static void dump_print(int ws_row, int ws_col, int if_num)
 				memcpy(lopt.selected_bssid, ap_cur->bssid, 6);
 			}
 
-			if (CHECK_REALLY_DEAUTH(ap_cur)) {
+			if (lopt.bAttackEnabled && CHECK_REALLY_DEAUTH(ap_cur)) {
 				bAP2AttackFound = true;
 				if(lopt.channel[0] != ap_cur->channel) {
 					if (wi_set_channel(wi[0], ap_cur->channel) == 0) {
@@ -4416,7 +4417,7 @@ static void dump_print(int ws_row, int ws_col, int if_num)
 		CHECK_END_OF_SCREEN();
 	}
 
-	if((lopt.singlechan == 1) && (bAP2AttackFound == 0)) {
+	if(lopt.bAttackEnabled && (lopt.singlechan == 1) && (!bAP2AttackFound)) {
 		LogMsg("No AP under attack found, continuing hopping");
 		lopt.singlechan = 0;
 	}
@@ -4471,7 +4472,7 @@ static void dump_print(int ws_row, int ws_col, int if_num)
 				textstyle(TEXT_REVERSE);
 			}
 
-			if (ap_cur->marked || CHECK_REALLY_DEAUTH(ap_cur))
+			if (ap_cur->marked || (lopt.bAttackEnabled && CHECK_REALLY_DEAUTH(ap_cur)))
 			{
 				textcolor_fg(ap_cur->marked_color);
 			}
@@ -6279,6 +6280,7 @@ int main(int argc, char * argv[])
 	lopt.channels = (int *) bg_chans;
 	lopt.one_beacon = 1;
 	lopt.singlechan = 0;
+	lopt.bAttackEnabled = true;
 	lopt.singlefreq = 0;
 	lopt.dump_prefix = NULL;
 	opt.record_data = 0;
@@ -7150,7 +7152,8 @@ int main(int argc, char * argv[])
 #endif
 					lopt.channel[i] = lopt.channel[0];
 				}
-				lopt.singlechan = 1;
+				lopt.singlechan = true;
+				lopt.bAttackEnabled = false;//disable attack if -c option given
 			}
 		}
 	}
