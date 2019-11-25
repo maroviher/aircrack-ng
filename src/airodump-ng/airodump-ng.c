@@ -4518,10 +4518,11 @@ static void dump_print(int ws_row, int ws_col, int if_num)
 
 				if (nlines >= (ws_row - 1)) return;
 
+				int iLen = 0;
 				if (!memcmp(ap_cur->bssid, BROADCAST, 6))
-					printf(" (not associated) ");
+					iLen+=printf(" (not associated) ");
 				else
-					printf(" %02X:%02X:%02X:%02X:%02X:%02X",
+					iLen+=printf(" %02X:%02X:%02X:%02X:%02X:%02X",
 						   ap_cur->bssid[0],
 						   ap_cur->bssid[1],
 						   ap_cur->bssid[2],
@@ -4529,7 +4530,7 @@ static void dump_print(int ws_row, int ws_col, int if_num)
 						   ap_cur->bssid[4],
 						   ap_cur->bssid[5]);
 
-				printf("  %02X:%02X:%02X:%02X:%02X:%02X",
+				iLen+=printf("  %02X:%02X:%02X:%02X:%02X:%02X",
 					   st_cur->stmac[0],
 					   st_cur->stmac[1],
 					   st_cur->stmac[2],
@@ -4537,27 +4538,24 @@ static void dump_print(int ws_row, int ws_col, int if_num)
 					   st_cur->stmac[4],
 					   st_cur->stmac[5]);
 
-				printf("  %4d ", st_cur->power);
-				printf("  %2d", st_cur->rate_to / 1000000);
-				printf("%c", (st_cur->qos_fr_ds) ? 'e' : ' ');
-				printf("-%2d", st_cur->rate_from / 1000000);
-				printf("%c", (st_cur->qos_to_ds) ? 'e' : ' ');
-				printf("  %4d", st_cur->missed);
-				printf(" %8lu", st_cur->nb_pkt);
-				printf("  %-5s",
+				iLen+=printf("  %4d ", st_cur->power);
+				iLen+=printf("  %2d", st_cur->rate_to / 1000000);
+				iLen+=printf("%c", (st_cur->qos_fr_ds) ? 'e' : ' ');
+				iLen+=printf("-%2d", st_cur->rate_from / 1000000);
+				iLen+=printf("%c", (st_cur->qos_to_ds) ? 'e' : ' ');
+				iLen+=printf("  %4d", st_cur->missed);
+				iLen+=printf(" %8lu", st_cur->nb_pkt);
+				iLen+=printf("  %-5s",
 					   (st_cur->wpa.pmkid[0] != 0)
 						   ? "PMKID"
 						   : (st_cur->wpa.state == 7 ? "EAPOL" : ""));
 				if(lopt.show_manufacturer)
-					printf(" '%s'", st_cur->manuf);
-				int ideauthLen = 0;
+					iLen+=printf(" '%s'", st_cur->manuf);
 				if(lopt.show_deauth_stat) {
-					char strbuf[100];
-					ideauthLen += sprintf( strbuf, "  %d/%d/%d/%d/%d/%d/%d/%d/%d",
+					iLen+=printf("  %d/%d/%d/%d/%d/%d/%d/%d/%d",
 						st_cur->m_uiCntAssocRequest, st_cur->m_uiCntAssocResp, st_cur->m_uiCntReAssocRequest,
 						st_cur->m_uiCntReAssocResp, st_cur->m_uiCntProbeRequest, st_cur->m_uiCntProbeResp,
 						st_cur->m_uiCntDisass, st_cur->m_uiCntAuth, st_cur->m_uiCntDeauth);
-					printf(" %s", strbuf);
 				}
 				if (ws_col > (columns_sta - 6))
 				{
@@ -4577,14 +4575,11 @@ static void dump_print(int ws_row, int ws_col, int if_num)
 
 						if (n >= (int) sizeof(ssid_list)) break;
 					}
-
-					memset(strbuf, 0, sizeof(strbuf));
-					snprintf(strbuf, sizeof(strbuf) - 1, "%-256s", ssid_list)
-							< 0
-						? abort()
-						: (void) 0;
-					strbuf[MAX(ws_col - 76 - (st_cur->manuf != NULL)?(strlen(st_cur->manuf) - 3):(0) - ideauthLen, 0)] = '\0';
-					printf(" %s", strbuf);
+					if(ws_col-iLen-1 >= 0)
+						ssid_list[ws_col-iLen-1] = 0;
+					iLen+=printf(" %s", ssid_list);
+					while(++iLen <= ws_col)//erase to the end of the line
+						putchar(' ');
 				}
 
 				erase_line(0);
